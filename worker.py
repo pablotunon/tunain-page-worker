@@ -2,6 +2,7 @@
 import boto3
 import fire
 import json
+import requests
 import torch.distributed as dist
 
 from llama import Llama
@@ -13,20 +14,28 @@ from typing import Optional
 sqs = boto3.client('sqs', endpoint_url='http://sqs.eu-west-1.localhost.localstack.cloud:4566')
 queue_url = 'http://sqs.eu-west-1.localhost.localstack.cloud:4566/000000000000/page_tasks'
 
+backend_url = 'http://127.0.0.1:8000/write-page'
 
-def send_results(results):
+
+def send_results(page_id, results):
     print(results)
-    pass
+    # TODO: add checks for content matching the desired format
+    requests.post(backend_url, {
+        "page_id": page_id,
+        "content": results[0]['generation']['content'],
+    })
 
 def process_message(message, generator):
     print(f"Received message: {message}")
     chat = json.loads(message['Body'])
+    # book_id = message['MessageAttributes']['BookId']['StringValue']
+    page_id = message['MessageAttributes']['PageId']['StringValue']
     results = generator.chat_completion([chat],
         max_gen_len=1024,
         temperature=0.6,
         top_p=0.9
     )
-    send_results(results)
+    send_results(page_id, results)
 
 
 def listen_for_messages(generator):
@@ -40,7 +49,7 @@ def listen_for_messages(generator):
             WaitTimeSeconds=20  # Adjust the wait time as needed
         )
 
-        if 'Messages' in response:
+        if 'Messages' in response and response['Messages']:
             message = response['Messages'][0]
             receipt_handle = message['ReceiptHandle']
             
