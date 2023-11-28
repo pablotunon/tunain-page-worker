@@ -31,7 +31,7 @@ def process_message(message, generator):
     # book_id = message['MessageAttributes']['BookId']['StringValue']
     page_id = message['MessageAttributes']['PageId']['StringValue']
     results = generator.chat_completion([chat],
-        max_gen_len=1024,
+        max_gen_len=2048,
         temperature=0.6,
         top_p=0.9
     )
@@ -66,7 +66,7 @@ def main(
     tokenizer_path: str = "../models/llama/tokenizer.model",
     temperature: float = 0.2,
     top_p: float = 0.95,
-    max_seq_len: int = 512,
+    max_seq_len: int = 2048,
     max_batch_size: int = 8,
     max_gen_len: Optional[int] = None,
     port: int = 8000,
