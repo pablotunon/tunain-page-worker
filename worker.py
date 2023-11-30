@@ -19,22 +19,48 @@ backend_url = 'http://127.0.0.1:8000/write-page'
 
 def send_results(page_id, results):
     print(results)
-    # TODO: add checks for content matching the desired format
     requests.post(backend_url, {
         "page_id": page_id,
-        "content": results[0]['generation']['content'],
+        "content": results
     })
+
+def process_multi_prompt(chat, generator):
+    text = generator.chat_completion([chat['text']],
+        max_gen_len=2048,
+        temperature=0.6,
+        top_p=0.9
+    )[0]['generation']['content']
+    illustration_promt = [chat['illustration'] + [{"role": "user", "content": text}]]
+    print(illustration_promt)
+    illustration = generator.chat_completion(illustration_promt,
+        max_gen_len=2048,
+        temperature=0.6,
+        top_p=0.9
+    )[0]['generation']['content']
+    return json.dumps({
+        'text': text,
+        'illustration': illustration
+    })
+
+def process_single_prompt(chat, generator):
+    # TODO: correct non-json responses
+    return generator.chat_completion([chat],
+        max_gen_len=2048,
+        temperature=0.6,
+        top_p=0.9
+    )[0]['generation']['content']
 
 def process_message(message, generator):
     print(f"Received message: {message}")
     chat = json.loads(message['Body'])
     # book_id = message['MessageAttributes']['BookId']['StringValue']
     page_id = message['MessageAttributes']['PageId']['StringValue']
-    results = generator.chat_completion([chat],
-        max_gen_len=2048,
-        temperature=0.6,
-        top_p=0.9
-    )
+
+    # Check format
+    if type(chat) == dict:
+        results = process_multi_prompt(chat, generator)
+    else:
+        results = process_single_prompt(chat, generator)
     send_results(page_id, results)
 
 
