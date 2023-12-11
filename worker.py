@@ -3,19 +3,26 @@ import boto3
 import fire
 import json
 import requests
+import logging
+import os
 import torch.distributed as dist
 
 from llama import Llama
 from typing import Optional
 
+logger = logging.getLogger(__name__)
+
 # torchrun --nproc_per_node 1 worker.py
 
 # Create SQS client
-sqs = boto3.client('sqs', endpoint_url='http://sqs.eu-west-1.localhost.localstack.cloud:4566')
-queue_url = 'http://sqs.eu-west-1.localhost.localstack.cloud:4566/000000000000/page_tasks'
+SQS_ENDPOINT = os.getenv('SQS_ENDPOINT', 'http://sqs.eu-west-1.localhost.localstack.cloud:4566')
+PAGE_QUEUE_URL = os.getenv('SQS_PAGE_TASK_QUEUE_URL', 'http://sqs.eu-west-1.localhost.localstack.cloud:4566/000000000000/page-tasks')
+
+sqs = boto3.client('sqs', endpoint_url=SQS_ENDPOINT)
 
 backend_url = 'http://127.0.0.1:8000/write-page'
 
+MAX_GENERATION_ATTEMPTS = 4
 
 def send_results(page_id, results):
     print(results)
@@ -26,14 +33,14 @@ def send_results(page_id, results):
 
 def process_multi_prompt(chat, generator):
     text = generator.chat_completion([chat['text']],
-        max_gen_len=2048,
+        max_gen_len=1024,
         temperature=0.6,
         top_p=0.9
     )[0]['generation']['content']
     illustration_promt = [chat['illustration'] + [{"role": "user", "content": text}]]
     print(illustration_promt)
     illustration = generator.chat_completion(illustration_promt,
-        max_gen_len=2048,
+        max_gen_len=1024,
         temperature=0.6,
         top_p=0.9
     )[0]['generation']['content']
@@ -43,12 +50,24 @@ def process_multi_prompt(chat, generator):
     })
 
 def process_single_prompt(chat, generator):
-    # TODO: correct non-json responses
-    return generator.chat_completion([chat],
-        max_gen_len=2048,
-        temperature=0.6,
-        top_p=0.9
-    )[0]['generation']['content']
+    attempts = 0
+    while attempts < MAX_GENERATION_ATTEMPTS:
+        try:
+            generated = generator.chat_completion([chat],
+                max_gen_len=1024,
+                temperature=0.6 + (attempts * 0.1),
+                top_p=0.9
+            )[0]['generation']['content']
+            # load the string to verify it has the correct format
+            generated_dict = json.loads(generated)
+            generated_dict['text']
+            generated_dict['illustration']
+            return generated
+        except json.decoder.JSONDecodeError:
+            attempts += 1
+            logger.warning(f"NOT JSON Generation - {attempts} attempts")
+    raise Exception("MAX_GENERATION_ATTEMPTS reached without a JSON")
+
 
 def process_message(message, generator):
     print(f"Received message: {message}")
@@ -67,7 +86,7 @@ def process_message(message, generator):
 def listen_for_messages(generator):
     while True:
         response = sqs.receive_message(
-            QueueUrl=queue_url,
+            QueueUrl=PAGE_QUEUE_URL,
             AttributeNames=['All'],
             MaxNumberOfMessages=1,
             MessageAttributeNames=['All'],
@@ -83,7 +102,7 @@ def listen_for_messages(generator):
             
             # Delete the received message from the queue
             sqs.delete_message(
-                QueueUrl=queue_url,
+                QueueUrl=PAGE_QUEUE_URL,
                 ReceiptHandle=receipt_handle
             )
 
@@ -119,12 +138,10 @@ def main(
             config = [None] * 4
             try:
                 dist.broadcast_object_list(config)
-                print(f"RANK {dist.get_rank()} NODE WORKING")
                 generator.chat_completion(
                     config[0], max_gen_len=config[1], temperature=config[2], top_p=config[3]
                 )
             except:
-                print("EXCEPT")
                 pass
 
 if __name__ == "__main__":
