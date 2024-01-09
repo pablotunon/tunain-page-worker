@@ -13,10 +13,15 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # torchrun --nproc_per_node 1 worker.py
+# python3.8 -m torch.distributed.run --nproc_per_node 1 worker.py
 
 # Create SQS client
 SQS_ENDPOINT = os.getenv('SQS_ENDPOINT', 'http://sqs.eu-west-1.localhost.localstack.cloud:4566')
 PAGE_QUEUE_URL = os.getenv('SQS_PAGE_TASK_QUEUE_URL', 'http://sqs.eu-west-1.localhost.localstack.cloud:4566/000000000000/page-tasks')
+MODEL_PATH = os.getenv('MODEL_PATH', '../models/llama/llama-2-7b-chat')
+TOKENIZER_PATH = os.getenv('TOKENIZER_PATH', '../models/llama/tokenizer.model')
+
+# Create SQS client
 
 sqs = boto3.client('sqs', endpoint_url=SQS_ENDPOINT)
 
@@ -107,8 +112,8 @@ def listen_for_messages(generator):
             )
 
 def main(
-    ckpt_dir: str = "../models/llama/llama-2-7b-chat",
-    tokenizer_path: str = "../models/llama/tokenizer.model",
+    ckpt_dir: str = MODEL_PATH,
+    tokenizer_path: str = TOKENIZER_PATH,
     temperature: float = 0.2,
     top_p: float = 0.95,
     max_seq_len: int = 2048,
