@@ -6,7 +6,9 @@ Tunain application allows users to co-write a book with an AI, generating both t
 
 ## Page Worker Overview
 
-The text worker repository generates AI-created text scripts based on user prompts using a Llama 2 model. It listens to an SQS queue, processes messages and uses the backend REST api on completion.
+The text worker repository generates AI-created text scripts based on user prompts using a Llama 2 model.
+
+It listens to an SQS queue, processes messages and uses the backend REST API on completion.
 
 ## Features
 
